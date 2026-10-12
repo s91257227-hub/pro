@@ -1,38 +1,30 @@
-# Deploy this sample to Render and capture real evidence
+# Automated Render deployment and evidence
 
-## What this repository is
-This is a newly generated minimal deployment demo, **not** the original ClinicDesk project or its full MEAN stack implementation. It must not be submitted as the original app unless your instructor accepts a fresh demonstration app.
+## What is automated
+The root `render.yaml` defines a Render Docker Web Service for the API. Render deploys commits automatically, and the GitHub Actions workflow runs API tests, builds the Docker image, waits for the live health endpoint, records the actual response, and commits evidence after a service URL is configured.
 
-## 1. Push to GitHub without using your laptop
-1. Open GitHub and create a new repository, e.g. `clinicdesk-deployment-demo`.
-2. Use **Add file → Upload files** and upload the extracted contents of this ZIP, keeping the folder structure. Commit to `main`.
-   - Alternatively, upload the ZIP as a repository release is not sufficient; Render needs the extracted repository files.
-3. In repository **Settings → Secrets and variables → Actions**, create secret `RENDER_DEPLOY_HOOK_URL` after making the Render service and copying its Deploy Hook URL.
+This repository remains a minimal ClinicDesk deployment demo, not the full original MEAN stack application.
 
-## 2. Create Render service
-1. Create a MongoDB database (e.g. MongoDB Atlas) and create a database user. Permit network access for Render according to your provider's current recommended setup.
-2. Open Render Dashboard → New → Web Service → connect the repository.
-3. Select **Docker** as runtime and set Dockerfile Path to `server/Dockerfile`.
-4. Set service name and region; record actual values from your dashboard.
-5. Add environment variables:
-   - `MONGODB_URI` = database URI (secret; never commit)
-   - `MONGODB_DB` = `clinicdesk`
-   - `CORS_ORIGIN` = actual frontend origin, if hosted separately
-   - `ALLOW_NO_DATABASE` = `true` only for a no-database smoke demo; for a real DB-backed deployment, omit or set `false`
-6. Create the service and wait for the deploy to finish.
-7. The health endpoint is `/health`. With a working database (or `ALLOW_NO_DATABASE=true` for demo-only mode) it should return HTTP 200; this is an expectation, not a recorded result.
+## One-time Render setup (required)
+1. Open the Render Dashboard and choose **New → Blueprint**.
+2. Connect GitHub account `shibinj-stack`, select repository `pro`, branch `main`, then apply the root `render.yaml` Blueprint.
+3. Wait for the first deployment to finish. Render will generate the actual public URL; it must not be guessed.
+4. In GitHub, open **Settings → Secrets and variables → Actions → Variables** and add:
+   - Name: `RENDER_SERVICE_URL`
+   - Value: the real Render base URL shown in the service dashboard, e.g. `https://<actual-service>.onrender.com` (replace with the actual value).
+5. Push any relevant commit to `main`, or use **Actions → ClinicDesk deployment checks → Run workflow** and provide the real URL in `backend_url`.
 
-## 3. Deploy the static demo UI (optional)
-1. Create a Render Static Site from the same repository.
-2. Set the publish directory to `web`; no build command is needed.
-3. Open the static URL and enter the actual API URL to check health. Configure CORS if the browser reports a CORS error.
+## Automatic evidence after setup
+On main-branch pushes, GitHub Actions runs tests and a Docker build, then retries the live `/health` endpoint for up to eight minutes. Success requires HTTP 200 and Render-injected metadata showing the actual service ID/name, public URL, branch, and deployed commit SHA. For app/config changes, the live commit must match the commit being checked.
 
-## 4. Capture genuine health response
-From GitHub Actions, after the backend is live, manually run workflow **Remote build and health evidence** with:
-- `backend_url`: actual Render URL (e.g. `https://<your-service>.onrender.com`; replace with your actual URL)
-- `deployment_id`: actual Render deploy ID or deployed commit SHA
+On verification, the workflow writes the real response and UTC check timestamp to `evidence/health-check.txt`, updates `evidence/deployment.md`, and commits both files. Evidence-only commits are excluded from the pipeline triggers and Render build filters to prevent loops. If health verification fails, the actual last response and diagnostic status are recorded and the workflow fails rather than reporting a false pass.
 
-The workflow sends a real HTTP request and commits `evidence/health-check.txt` back to the repository. If the health endpoint does not return a 2xx, the workflow fails rather than fabricating success.
+## Database mode
+The current Blueprint sets `ALLOW_NO_DATABASE=true` for a database-free deployment smoke test. This proves the API is reachable, not that MongoDB works. For real database validation, configure a valid `MONGODB_URI` in Render, then remove/set `ALLOW_NO_DATABASE=false` and confirm the health response reports `database: "connected"`.
 
-## 5. Fill submission record
-Copy real service name, region, public URL, deploy ID/commit SHA, timestamp and Render event log details into `evidence/deployment.md`. Never include secret values. Keep `PENDING` where evidence has not yet been captured.
+## Limits of automated evidence
+The app returns Render's real runtime service and Git commit metadata. Render's exact deploy event timestamp and deploy ID are not exposed by this app's HTTP endpoint; record those separately from the Render service's **Events** page if the course rubric explicitly requires them. Never fill such fields with guessed values.
+
+References:
+- Render Blueprint specification: https://render.com/docs/blueprint-spec
+- Render runtime environment variables: https://render.com/docs/environment-variables
